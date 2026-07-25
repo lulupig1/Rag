@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>知流 RAG · 查询监控</title>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --text: #1e2235;
+      --text-secondary: #5a6178;
+      --text-muted: #949aae;
+      --accent: #0ea882;
+      --border: #e6e9f0;
+      --shadow-sm: 0 1px 3px rgba(16,24,48,.04);
+      --shadow-md: 0 6px 18px rgba(16,24,48,.07);
+      --radius: 12px;
+      --radius-lg: 18px;
+      --green: #10b981;
+      --red: #ef4444;
+      --blue: #3b82f6;
+      --amber: #f59e0b;
+    }
+
+    * { box-sizing:border-box }
+
+    body {
+      margin:0;
+      font-family: "Inter", "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      background: var(--bg);
+      color:var(--text);
+      min-height:100vh;
+      padding:20px 16px;
+    }
+
+    .wrap { max-width:1280px; margin:0 auto; }
+
+    /* ---- 顶栏 ---- */
+    .topbar {
+      display:flex; align-items:center; justify-content:space-between;
+      margin-bottom:18px; flex-wrap:wrap; gap:10px;
+    }
+    .brand { display:flex; align-items:center; gap:10px; }
+    .logo {
+      width:34px; height:34px; background:linear-gradient(135deg, var(--accent), #14c99b);
+      border-radius:9px; display:flex; align-items:center; justify-content:center;
+      color:#fff; font-size:16px; font-weight:700;
+    }
+    .brand h1 { font-size:18px; font-weight:700; margin:0; letter-spacing:-.01em; }
+    .brand span { font-size:12px; color:var(--text-muted); }
+
+    .controls { display:flex; gap:8px; align-items:center; }
+    .controls input {
+      height:36px; border:1.5px solid var(--border); border-radius:9px;
+      padding:0 12px; font-size:13px; background:var(--surface);
+      min-width:220px; outline:none; transition:border-color .18s;
+    }
+    .controls input:focus { border-color:var(--accent); }
+    .btn {
+      height:36px; border:none; border-radius:9px; padding:0 16px;
+      font-size:12.5px; font-weight:600; cursor:pointer;
+      background:var(--accent); color:#fff; transition:all .18s;
+    }
+    .btn:hover { background:#0b8a6a; }
+
+    /* ---- 统计卡片 ---- */
+    .cards {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));
+      gap:12px; margin-bottom:16px;
+    }
+    .card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius); padding:16px 18px;
+      box-shadow:var(--shadow-sm);
+    }
+    .card .k { font-size:11.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; font-weight:600; }
+    .card .v { font-size:26px; font-weight:700; margin-top:6px; }
+    .card .v.g { color:var(--green); }
+    .card .v.r { color:var(--red); }
+    .card .v.b { color:var(--blue); }
+    .card .v.a { color:var(--amber); }
+
+    /* ---- 表格 ---- */
+    .tbl {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow-sm);
+    }
+    table { width:100%; border-collapse:collapse; }
+    th, td { padding:11px 14px; border-bottom:1px solid var(--border); font-size:13px; text-align:left; }
+    th { background:#fafbfd; font-weight:700; color:var(--text-secondary); font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; }
+    tr:hover td { background:#fafdfb; }
+    tr:last-child td { border-bottom:none; }
+
+    .tag { display:inline-block; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:700; }
+    .tag.ok { background:#d1fae5; color:#065f46; }
+    .tag.bad { background:#fee2e2; color:#991b1b; }
+    .tag.run { background:#dbeafe; color:#1e40af; }
+
+    .q { max-width:300px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sid { max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-family:"SF Mono","Consolas",monospace; font-size:12px; }
+
+    /* ---- 详情面板 ---- */
+    .detail {
+      margin-top:14px; background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius); padding:18px 20px; display:none;
+      box-shadow:var(--shadow-sm);
+    }
+    .detail h3 { margin:0 0 12px; font-size:15px; }
+    .detail .line { margin:6px 0; font-size:13px; }
+    .detail .label { color:var(--text-muted); font-weight:600; display:inline-block; min-width:70px; }
+
+    .empty-row td { text-align:center; padding:32px; color:var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- ====== 顶栏 ====== -->
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo">知</div>
+        <div>
+          <h1>知流 RAG</h1>
+          <span>查询监控面板</span>
+        </div>
+      </div>
+      <div class="controls">
+        <input id="kw" placeholder="搜索 query / session_id …" />
+        <button class="btn" id="btnRefresh">刷新数据</button>
+      </div>
+    </div>
+
+    <!-- ====== 统计卡片 ====== -->
+    <div class="cards">
+      <div class="card"><div class="k">总请求</div><div class="v" id="mTotal">0</div></div>
+      <div class="card"><div class="k">成功</div><div class="v g" id="mOk">0</div></div>
+      <div class="card"><div class="k">失败</div><div class="v r" id="mFail">0</div></div>
+      <div class="card"><div class="k">处理中</div><div class="v b" id="mRun">0</div></div>
+      <div class="card"><div class="k">成功率</div><div class="v g" id="mSr">0%</div></div>
+      <div class="card"><div class="k">P95 延迟</div><div class="v a" id="mP95">0ms</div></div>
+    </div>
+
+    <!-- ====== 表格 ====== -->
+    <div class="tbl">
+      <table>
+        <thead>
+          <tr>
+            <th>状态</th><th>Session ID</th><th>问题</th><th>延迟</th>
+            <th>完成 / 进行中</th><th>答案长度</th><th>更新时间</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- ====== 详情面板 ====== -->
+    <div class="detail" id="detail">
+      <h3>任务详情</h3>
+      <div id="detailContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = `${location.protocol}//${location.host}`;
+    const tbody = document.getElementById('tbody');
+    const kw = document.getElementById('kw');
+    const detail = document.getElementById('detail');
+    const detailContent = document.getElementById('detailContent');
+
+    const fmt = ts => ts ? new Date(ts*1000).toLocaleString('zh-CN') : '-';
+    const esc = s => String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+
+    function tag(status) {
+      if(status==='completed') return '<span class="tag ok">已完成</span>';
+      if(status==='failed') return '<span class="tag bad">失败</span>';
+      return '<span class="tag run">处理中</span>';
+    }
+
+    function setSummary(s) {
+      document.getElementById('mTotal').textContent = s.total ?? 0;
+      document.getElementById('mOk').textContent = s.completed ?? 0;
+      document.getElementById('mFail').textContent = s.failed ?? 0;
+      document.getElementById('mRun').textContent = s.processing ?? 0;
+      document.getElementById('mSr').textContent = `${s.success_rate ?? 0}%`;
+      document.getElementById('mP95').textContent = `${s.p95_latency_ms ?? 0}ms`;
+    }
+
+    async function load() {
+      try {
+        const res = await fetch(`${API_BASE}/query/monitor/recent?limit=200`);
+        const data = await res.json();
+        setSummary(data.summary || {});
+        const k = (kw.value||'').trim().toLowerCase();
+        const items = (data.items||[]).filter(x => {
+          const t = `${x.session_id||''} ${x.query||''}`.toLowerCase();
+          return !k || t.includes(k);
+        });
+
+        if(!items.length) {
+          tbody.innerHTML = '<tr class="empty-row"><td colspan="8">暂无数据</td></tr>';
+        } else {
+          tbody.innerHTML = items.map(x => `
+            <tr>
+              <td>${tag(x.status)}</td>
+              <td class="sid" title="${esc(x.session_id)}">${esc(x.session_id)}</td>
+              <td class="q" title="${esc(x.query)}">${esc(x.query)}</td>
+              <td>${x.latency_ms ?? '-'} ms</td>
+              <td>${x.done_count??0} / ${x.running_count??0}</td>
+              <td>${x.answer_len??0}</td>
+              <td>${fmt(x.updated_at)}</td>
+              <td><button class="btn" onclick="showDetail('${esc(x.session_id)}')" style="height:28px;font-size:11px;padding:0 10px;">详情</button></td>
+            </tr>
+          `).join('');
+        }
+      } catch(_) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">加载失败，请检查服务状态</td></tr>';
+      }
+    }
+
+    async function showDetail(sessionId) {
+      try {
+        const res = await fetch(`${API_BASE}/query/monitor/${sessionId}`);
+        const d = await res.json();
+        detail.style.display = 'block';
+        detailContent.innerHTML = `
+          <div class="line"><span class="label">Session</span> <code>${esc(d.session_id)}</code></div>
+          <div class="line"><span class="label">状态</span> ${esc(d.status)}</div>
+          <div class="line"><span class="label">问题</span> ${esc(d.query || '')}</div>
+          <div class="line"><span class="label">延迟</span> ${d.latency_ms ?? '-'} ms</div>
+          <div class="line"><span class="label">已完成</span> ${esc((d.done_list||[]).join(' | '))}</div>
+          <div class="line"><span class="label">进行中</span> ${esc((d.running_list||[]).join(' | '))}</div>
+          <div class="line"><span class="label">错误</span> ${esc(d.error || '无')}</div>
+        `;
+      } catch(_) { detail.style.display = 'none'; }
+    }
+
+    document.getElementById('btnRefresh').addEventListener('click', load);
+    kw.addEventListener('input', load);
+    load();
+    setInterval(load, 3000);
+    window.showDetail = showDetail;
+  </script>
+</body>
+</html>
